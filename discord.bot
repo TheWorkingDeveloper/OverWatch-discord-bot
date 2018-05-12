@@ -3,6 +3,7 @@ import discord
 import re
 import asyncio
 import os.path
+import operator
 
 
 TOKEN = ''
@@ -27,7 +28,7 @@ def get_role(role_name, server):
 
 # Is the user registered | int 0,1
 def isRegistered(authorId):
-    with open("overwatchgamers.db") as db:
+    with open('overwatchgamers.db') as db:
         for user in db:
             if(user.startswith(authorId)):
               return 1
@@ -53,21 +54,24 @@ def updateSR(authorId, userInfo):
     updated = 0
     #create if not exist
     if not os.path.isfile(authorId):
-        db = open(authorId, "w+")
-        db.write("0||0")
+        db = open(authorId, 'w+')
+        db.write('0||0')
         db.close()
 
     with open(authorId) as db:
         for user in db:
-            SR = user.split("||")
-    if SR[0] > userInfo['rating'] or SR[0] == 0:
+            SR = user.split('||')
+    if userInfo.get('rating', 'error') == 'error':
+        return 0
+
+    if SR[0] > userInfo['rating'] or SR[0] == '0':
         SR[0] = userInfo['rating']
         updated = -1
     if SR[1] < userInfo['rating']:
         SR[1] = userInfo['rating']
         updated = 1
-    db = open(authorId, "w+")
-    db.write(SR[0] + "||" + SR[1])
+    db = open(authorId, 'w+')
+    db.write(SR[0] + "||" + SR[1].replace('\n',''))
     db.close()
     return updated
 
@@ -75,7 +79,7 @@ def getSR(authorId):
     with open(authorId) as db:
         for user in db:
             SR = user.split("||")
-            return (SR[0],SR[1])   
+            return (SR[0],SR[1].replace('\n',''))
 
 @client.event
 async def on_message(message):
@@ -112,7 +116,7 @@ async def on_message(message):
 
         # Create user file
         db = open(message.author.id,'w+')
-        db.write("0|0")
+        db.write("0||0")
         db.close()
 
         # Update user ranking
@@ -164,8 +168,29 @@ async def on_message(message):
         'Winrate: ' + str(winRate) + '%\n' \
         'Your season low: ' + SR[0] + 'SR\n' \
         'Your season high: ' + SR[1] + 'SR\n'
-        
         await client.send_message(message.channel, msg)
+
+    if message.content.startswith('!leaderboard'):
+        leaderboard = {}
+        with open("overwatchgamers.db") as db:
+            for user in db:
+                user = user.split('||')
+                battleTag = user[1].replace('\n', '')
+                OWTag = battleTag
+                userInfo = requests.get("https://ow-api.com/v1/stats/PC/Europe/" + OWTag.replace('#', '-') + "/profile").json()
+                leaderboard[OWTag] = userInfo.get('rating', '0')
+                updateSR(user[0], userInfo)
+
+        i = 1
+        msg = '**Leaderboard:**\n'
+        sortedLB = sorted(leaderboard.items(), key=lambda x: x[1], reverse=True)
+        for j, (battleTag, SR) in enumerate(sortedLB):
+            if not SR:
+                SR = '0'
+            msg += str(i) + '. ' + str(battleTag) + ' - ' + str(SR) + 'SR\n'
+            i += 1
+        await client.send_message(message.channel, msg)
+          
 
 
 @client.event
@@ -176,4 +201,3 @@ async def on_ready():
     print('------')
 
 client.run(TOKEN)
-
