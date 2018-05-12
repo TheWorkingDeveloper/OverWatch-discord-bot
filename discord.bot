@@ -1,0 +1,179 @@
+import requests
+import discord
+import re
+import asyncio
+import os.path
+
+
+TOKEN = ''
+client = discord.Client()
+
+roles = {}
+roles['GrandMaster'] = '406939082933927936'
+roles['Master']      = '406935384724078592'
+roles['Diamond']     = '406934951913848832'
+roles['Platinum']    = '406934877645176862'
+roles['Gold']        = '406934841368510464'
+roles['Silver']      = '406934692332306462'
+roles['Bronze']      = '406934619036844033'
+
+# Get role object
+def get_role(role_name, server):
+    for role in server.roles:
+        if role.name == role_name:
+            return role
+    return None
+
+
+# Is the user registered | int 0,1
+def isRegistered(authorId):
+    with open("overwatchgamers.db") as db:
+        for user in db:
+            if(user.startswith(authorId)):
+              return 1
+    return 0
+
+# Upgrade user to SR Class
+async def upgradeUser(client, message, userInfo):
+    assigned = False
+    for role in message.author.roles:
+        for rankName, roleId in roles.items():
+            if role.id == roles[userInfo['ratingName']]:
+                assigned = True
+            if (role.id == roleId and role.id != roles[userInfo['ratingName']]):
+                await client.remove_roles(message.author, role)
+    if not assigned:
+        await client.add_roles(message.author, get_role(userInfo['ratingName'], message.server))
+        print(message.author.nick + " was upgraded to " + userInfo['ratingName'])
+        msg = 'Your rank has been updated to ' + userInfo['ratingName']
+        await client.send_message(message.channel, msg)
+
+# Update min and max SR of user
+def updateSR(authorId, userInfo):
+    updated = 0
+    #create if not exist
+    if not os.path.isfile(authorId):
+        db = open(authorId, "w+")
+        db.write("0||0")
+        db.close()
+
+    with open(authorId) as db:
+        for user in db:
+            SR = user.split("||")
+    if SR[0] > userInfo['rating'] or SR[0] == 0:
+        SR[0] = userInfo['rating']
+        updated = -1
+    if SR[1] < userInfo['rating']:
+        SR[1] = userInfo['rating']
+        updated = 1
+    db = open(authorId, "w+")
+    db.write(SR[0] + "||" + SR[1])
+    db.close()
+    return updated
+
+def getSR(authorId):
+    with open(authorId) as db:
+        for user in db:
+            SR = user.split("||")
+            return (SR[0],SR[1])   
+
+@client.event
+async def on_message(message):
+    # we do not want the bot to reply to itself
+    if message.author == client.user:
+        return
+
+
+    # Registration command
+    if message.content.startswith('!register'):
+        if isRegistered(message.author.id):
+            msg = 'You are already registered'
+            await client.send_message(message.channel, msg)
+            return
+
+        battleTag = message.content.replace('!register ', '')
+        if "#" not in battleTag or "@" in battleTag:
+            msg = 'Please enter your Battle Tag'
+            await client.send_message(message.channel, msg)
+            return
+        msg = 'Welcome to the server {0.author.mention}! Thanks for registering'.format(message)
+        await client.send_message(message.channel, msg)
+        msg = 'You are now known as ' + str(battleTag) + '.'
+        await client.send_message(message.channel, msg)
+
+        # Change nickname
+        nickname = re.sub('([a-zA-Z])', lambda x: x.groups()[0].upper(), battleTag, 1)
+        await client.change_nickname(message.author, nickname)
+
+        # Create database entry
+        db = open("overwatchgamers.db", "a")
+        db.write(message.author.id + "||" + battleTag)
+        db.close()
+
+        # Create user file
+        db = open(message.author.id,'w+')
+        db.write("0|0")
+        db.close()
+
+        # Update user ranking
+        OWTag = message.author.nick.replace('#', '-')
+        userInfo = requests.get("https://ow-api.com/v1/stats/PC/Europe/" + OWTag + "/profile").json()
+        await upgradeUser(client, message, userInfo)
+        # Update highest & lowest SR
+        if updateSR(message.author.id, userInfo) == 1:
+            msg = 'New Highest!'
+            await client.send_message(message.channel, msg)
+
+    # What is my SR?
+    if message.content.startswith('!info'):
+        if not isRegistered(message.author.id):
+            msg = 'You can\'t execute this command if you\'re not registered'
+            await client.send_message(message.channel, msg)
+            return
+        OWTag = message.author.nick.replace('#', '-')
+        userInfo = requests.get("https://ow-api.com/v1/stats/PC/Europe/" + OWTag + "/profile").json()
+        msg = 'Your SR is: ' + userInfo['rating'] + '\n' \
+        'you are a filthy ' + userInfo['ratingName'] 
+        await client.send_message(message.channel, msg)
+        await upgradeUser(client, message, userInfo)
+
+        if updateSR(message.author.id, userInfo) == 1:
+            msg = '*New Highest!*'
+            await client.send_message(message.channel, msg)
+    if message.content.startswith('!whoami'):
+        msg = 'You are {0.author.id} also known as {0.author.name}.'.format(message)
+        await client.send_message(message.channel, msg)
+
+
+    if message.content.startswith('!stats'):
+        if not isRegistered(message.author.id):
+            msg = 'You can\'t execute this command if you\'re not registered'
+            await client.send_message(message.channel, msg)
+            return
+        OWTag = message.author.nick.replace('#', '-')
+        userInfo = requests.get("https://ow-api.com/v1/stats/PC/Europe/" + OWTag + "/profile").json()
+        winRate = round(userInfo['competitiveStats']['games']['won']/userInfo['competitiveStats']['games']['played']*100, 2)
+        
+        if updateSR(message.author.id, userInfo) == 1:
+            msg = '*New Highest!*'
+            await client.send_message(message.channel, msg)
+        SR = getSR(message.author.id)
+        msg = '**Your Ranked stats:**\n' \
+        'Games Played: ' + str(userInfo['competitiveStats']['games']['played']) + '\n' \
+        'Games Won: ' + str(userInfo['competitiveStats']['games']['won']) + '\n' \
+        'Winrate: ' + str(winRate) + '%\n' \
+        'Your season low: ' + SR[0] + 'SR\n' \
+        'Your season high: ' + SR[1] + 'SR\n'
+        
+        await client.send_message(message.channel, msg)
+
+
+@client.event
+async def on_ready():
+    print('Logged in as')
+    print(client.user.name)
+    print(client.user.id)
+    print('------')
+
+client.run(TOKEN)
+
