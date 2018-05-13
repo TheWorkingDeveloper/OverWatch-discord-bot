@@ -220,6 +220,9 @@ async def on_message(message):
         with open(databaseFile, 'w') as newDb:
             newDb.write(newUserList)
 
+        msg = 'You are unregistered now. Use !register again to register.'
+        await client.send_message(message.channel, msg)
+
 
 @client.event
 async def on_ready():
