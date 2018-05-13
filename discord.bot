@@ -1,4 +1,5 @@
 import os.path
+import os
 import re
 import requests
 import discord
@@ -210,6 +211,7 @@ async def on_message(message):
             await client.send_message(message.channel, msg)
             return
 
+        # Create a new list of users
         with open(databaseFile) as db:
             newUserList = []
             for userString in db:
@@ -217,8 +219,16 @@ async def on_message(message):
                 if message.author.id not in user[0]:
                     newUserList.append(user)
 
+        # Write new list to the 'database'
         with open(databaseFile, 'w') as newDb:
-            newDb.write(newUserList)
+            for user in newUserList:
+                newDb.write(user)
+
+        # Remove the user file
+        try:
+            os.remove(message.author.id)
+        except OSError:
+            pass
 
         msg = 'You are unregistered now. Use !register again to register.'
         await client.send_message(message.channel, msg)
