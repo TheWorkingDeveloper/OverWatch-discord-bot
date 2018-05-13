@@ -217,7 +217,7 @@ async def on_message(message):
             for userString in db:
                 user = userString.split("||")
                 if message.author.id not in user[0]:
-                    newUserList.append(user)
+                    newUserList.append(userString)
 
         # Write new list to the 'database'
         with open(databaseFile, 'w') as newDb:
