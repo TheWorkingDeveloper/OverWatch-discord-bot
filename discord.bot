@@ -230,7 +230,7 @@ async def on_message(message):
         except OSError:
             pass
 
-        msg = 'You are unregistered now. Use !register again to register.'
+        msg = 'You are now unregistered. Use !register again to register.'
         await client.send_message(message.channel, msg)
 
 
