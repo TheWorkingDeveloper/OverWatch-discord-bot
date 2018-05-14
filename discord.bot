@@ -1,88 +1,49 @@
-import os.path
-import os
 import re
 import requests
 import discord
+import os.path
+
 
 TOKEN = ''
 client = discord.Client()
 
-roles = {}
-roles['GrandMaster'] = '406939082933927936'
-roles['Master']      = '406935384724078592'
-roles['Diamond']     = '406934951913848832'
-roles['Platinum']    = '406934877645176862'
-roles['Gold']        = '406934841368510464'
-roles['Silver']      = '406934692332306462'
-roles['Bronze']      = '406934619036844033'
+ROLES = {}
+ROLES['GrandMaster'] = '406939082933927936'
+ROLES['Master'] = '406935384724078592'
+ROLES['Diamond'] = '406934951193848832'
+ROLES['Platinum'] = '406934877645176862'
+ROLES['Gold'] = '406934841368510464'
+ROLES['Silver'] = '406934692332306462'
+ROLES['Bronze'] = '406934619036844033'
 
 databaseFile = 'overwatchgamers.db'
 
 
-# Get role object
-def get_role(role_name, server):
+def keyExists(dict, key):
+    """
+    Verify the existence of a key in a dictionary
+
+    :param dict: Dictionary to look up in
+    :param key (str): Key of dict to look up
+    :returns: Bool
+    """
+    if key in dict.keys():
+        return True
+    return False
+
+
+def getRole(roleName, server):
+    """
+    Get role object from discord
+
+    :param roleName: Name of role to get object of
+    :param server: Discord server object
+    :returns: role: Return role object or none if no role exists.
+    """
     for role in server.roles:
-        if role.name == role_name:
+        if role.name == roleName:
             return role
     return None
-
-
-# Is the user registered | int 0,1
-def isRegistered(authorId):
-    with open(databaseFile) as db:
-        for user in db:
-            if(user.startswith(authorId)):
-                return 1
-    return 0
-
-# Upgrade user to SR Class
-async def upgradeUser(client, message, userInfo):
-    assigned = False
-    for role in message.author.roles:
-        for rankName, roleId in roles.items():
-            if role.id == roles[userInfo['ratingName']]:
-                assigned = True
-            if (role.id == roleId and role.id != roles[userInfo['ratingName']]):
-                await client.remove_roles(message.author, role)
-    if not assigned:
-        await client.add_roles(message.author, get_role(userInfo['ratingName'], message.server))
-        print(message.author.nick + " was upgraded to " + userInfo['ratingName'])
-        msg = 'Your rank has been updated to ' + userInfo['ratingName']
-        await client.send_message(message.channel, msg)
-
-
-# Update min and max SR of user
-def updateSR(authorId, userInfo):
-    updated = 0
-    #create if not exist
-    if not os.path.isfile(authorId):
-        db = open(authorId, 'w+')
-        db.write('0||0')
-        db.close()
-
-    with open(authorId) as db:
-        for user in db:
-            SR = user.split('||')
-    if userInfo.get('rating', 'error') == 'error':
-        return 0
-
-    if SR[0] > userInfo['rating'] or SR[0] == '0':
-        SR[0] = userInfo['rating']
-        updated = -1
-    if SR[1] < userInfo['rating']:
-        SR[1] = userInfo['rating']
-        updated = 1
-    db = open(authorId, 'w+')
-    db.write(SR[0] + "||" + SR[1].replace('\n',''))
-    db.close()
-    return updated
-
-
-def getSR(authorId):
-    with open(authorId) as db:
-        for user in db:
-            SR = user.split("||")
-            return (SR[0],SR[1].replace('\n',''))
 
 
 def getUserInfoFromAPI(OWTag):
@@ -93,12 +54,102 @@ def getUserInfoFromAPI(OWTag):
     """
     return requests.get("https://ow-api.com/v1/stats/PC/Europe/" + OWTag + "/profile").json()
 
+
+def getSR(authorId):
+    """
+    Get season high and season low from file
+
+    :param authorId: Author id of user to update
+    :returns: (Season Low, Season High) (tuple)
+    """
+    with open(authorId) as db:
+        for user in db:
+            SR = user.split("||")
+            return (SR[0], SR[1].replace('\n', ''))
+
+
+def isRegistered(authorId):
+    """
+    Check if a user is already registered
+
+    :param authorId: Author id of user to check
+    :returns: Bool: True or False if upgraded
+    """
+    with open('overwatchgamers.db') as db:
+        for user in db:
+            if user.startswith(authorId):
+                return True
+    return False
+
+
+async def upgradeUser(client, message, userInfo):
+    """
+    Update the rank of a user
+
+    :param client: Discord client object
+    :param message: Discord Message object
+    :param userInfo: Dict from overwatch API
+    :returns: Bool: True or False if upgraded
+    """
+    assigned = False
+    for role in message.author.roles:
+        for rankName, roleId in ROLES.items():
+            if keyExists(userInfo, 'ratingName'):
+                if role.id == ROLES[userInfo['ratingName']]:
+                    assigned = True
+                if (role.id == roleId and role.id != ROLES[userInfo['ratingName']]):
+                    await client.remove_roles(message.author, role)
+            else:
+                assigned = True
+    if not assigned:
+        await client.add_roles(message.author, getRole(userInfo['ratingName'], message.server))
+        print(message.author.nick + " was upgraded to " + userInfo['ratingName'])
+        msg = 'Your rank has been updated to ' + userInfo['ratingName']
+        await client.send_message(message.channel, msg)
+        return True
+    return False
+
+
+def updateSR(authorId, userInfo):
+    """
+    Update the SR of the given author
+
+    :param authorId: Author id of user to update
+    :param userInfo: Dict from overwatch API
+    :returns: -1: New season Low
+    :returns: 0: No changes
+    :returns: 1: New season High
+    """
+    updated = 0
+    # create if not exist
+    if not os.path.isfile(authorId):
+        db = open(authorId, 'w+')
+        db.write('0||0')
+        db.close()
+
+    with open(authorId) as db:
+        for user in db:
+            SR = user.split('||')
+    if not keyExists(userInfo, 'rating'):
+        return 0
+
+    if SR[0] > userInfo['rating'] or SR[0] == '0':
+        SR[0] = userInfo['rating']
+        updated = -1
+    if SR[1] < userInfo['rating']:
+        SR[1] = userInfo['rating']
+        updated = 1
+    db = open(authorId, 'w+')
+    db.write(SR[0] + "||" + SR[1].replace('\n', ''))
+    db.close()
+    return updated
+
+
 @client.event
-async def on_message(message):
+async def onMessage(message):
     # we do not want the bot to reply to itself
     if message.author == client.user:
         return
-
 
     # Registration command
     if message.content.startswith('!register'):
@@ -108,7 +159,7 @@ async def on_message(message):
             return
 
         battleTag = message.content.replace('!register ', '')
-        if "#" not in battleTag or "@" in battleTag:
+        if re.match("^([A-Za-z0-9]+?)#([0-9]+)$", battleTag):
             msg = 'Please enter your Battle Tag'
             await client.send_message(message.channel, msg)
             return
@@ -127,7 +178,7 @@ async def on_message(message):
         db.close()
 
         # Create user file
-        db = open(message.author.id,'w+')
+        db = open(message.author.id, 'w+')
         db.write("0||0")
         db.close()
 
@@ -148,14 +199,20 @@ async def on_message(message):
             return
         OWTag = message.author.nick.replace('#', '-')
         userInfo = getUserInfoFromAPI(OWTag)
-        msg = 'Your SR is: ' + userInfo['rating'] + '\n' \
-        'you are a filthy ' + userInfo['ratingName']
-        await client.send_message(message.channel, msg)
-        await upgradeUser(client, message, userInfo)
+
+        if keyExists(userInfo, 'rating'):
+            msg = 'Your SR is: ' + userInfo['rating'] + '\n' \
+                  'you are a filthy ' + userInfo['ratingName']
+            await client.send_message(message.channel, msg)
+            await upgradeUser(client, message, userInfo)
+        else:
+            msg = 'You are not ranked yet'
+            await client.send_message(message.channel, msg)
 
         if updateSR(message.author.id, userInfo) == 1:
             msg = '*New Highest!*'
             await client.send_message(message.channel, msg)
+
     if message.content.startswith('!whoami'):
         msg = 'You are {0.author.id} also known as {0.author.name}.'.format(message)
         await client.send_message(message.channel, msg)
@@ -168,6 +225,10 @@ async def on_message(message):
             return
         OWTag = message.author.nick.replace('#', '-')
         userInfo = getUserInfoFromAPI(OWTag)
+        if not keyExists(userInfo, 'competitiveStats'):
+            msg = 'You have not played competitive yet.'
+            await client.send_message(message.channel, msg)
+            return
         winRate = round(userInfo['competitiveStats']['games']['won']/userInfo['competitiveStats']['games']['played']*100, 2)
 
         if updateSR(message.author.id, userInfo) == 1:
@@ -175,14 +236,15 @@ async def on_message(message):
             await client.send_message(message.channel, msg)
         SR = getSR(message.author.id)
         msg = '**Your Ranked stats:**\n' \
-        'Games Played: ' + str(userInfo['competitiveStats']['games']['played']) + '\n' \
-        'Games Won: ' + str(userInfo['competitiveStats']['games']['won']) + '\n' \
-        'Winrate: ' + str(winRate) + '%\n' \
-        'Your season low: ' + SR[0] + 'SR\n' \
-        'Your season high: ' + SR[1] + 'SR\n'
+              'Games Played: ' + str(userInfo['competitiveStats']['games']['played']) + '\n' \
+              'Games Won: ' + str(userInfo['competitiveStats']['games']['won']) + '\n' \
+              'Winrate: ' + str(winRate) + '%\n' \
+              'Current SR: ' + str(userInfo['rating']) + 'SR\n' \
+              'Your season low: ' + SR[0] + 'SR\n' \
+              'Your season high: ' + SR[1] + 'SR\n'
         await client.send_message(message.channel, msg)
 
-    #Display leaderboard
+    # Display leaderboard
     if message.content.startswith('!leaderboard'):
         leaderboard = {}
         with open(databaseFile) as db:
@@ -204,7 +266,7 @@ async def on_message(message):
             i += 1
         await client.send_message(message.channel, msg)
 
-    #Unregister player
+    # Unregister player
     if message.content.startswith('!unregister'):
         if not isRegistered(message.author.id):
             msg = 'You can\'t execute this command if you\'re not registered'
@@ -230,12 +292,12 @@ async def on_message(message):
         except OSError:
             pass
 
-        msg = 'You are now unregistered. Use !register again to register.'
+        msg = 'You are now unregistered. Use !register to re-register.'
         await client.send_message(message.channel, msg)
 
 
 @client.event
-async def on_ready():
+async def onReady():
     print('Logged in as')
     print(client.user.name)
     print(client.user.id)
