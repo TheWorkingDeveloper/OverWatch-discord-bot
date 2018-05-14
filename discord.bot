@@ -202,7 +202,7 @@ async def onMessage(message):
 
         if keyExists(userInfo, 'rating'):
             msg = 'Your SR is: ' + userInfo['rating'] + '\n' \
-            'you are a filthy ' + userInfo['ratingName']
+                  'you are a filthy ' + userInfo['ratingName']
             await client.send_message(message.channel, msg)
             await upgradeUser(client, message, userInfo)
         else:
@@ -266,8 +266,7 @@ async def onMessage(message):
             i += 1
         await client.send_message(message.channel, msg)
 
-
-    #Unregister player
+    # Unregister player
     if message.content.startswith('!unregister'):
         if not isRegistered(message.author.id):
             msg = 'You can\'t execute this command if you\'re not registered'
@@ -293,7 +292,7 @@ async def onMessage(message):
         except OSError:
             pass
 
-        msg = 'You are now unregistered. Use !register again to register.'
+        msg = 'You are now unregistered. Use !register to re-register.'
         await client.send_message(message.channel, msg)
 
 
